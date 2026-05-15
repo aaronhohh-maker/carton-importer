@@ -3,6 +3,24 @@ export interface PricingTier {
   price: number
 }
 
+export interface SizeTier {
+  id: string
+  category_id: string
+  size_label: string
+  pricing_tiers: PricingTier[]
+  created_at: string
+}
+
+export interface Category {
+  id: string
+  name: string
+  shopify_collection_id: string | null
+  shopify_tag: string | null
+  noissue_url_path: string | null
+  created_at: string
+  size_tiers?: SizeTier[]
+}
+
 export interface ScrapedProduct {
   title: string
   description: string
