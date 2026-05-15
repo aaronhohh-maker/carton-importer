@@ -44,7 +44,7 @@ async function handleScrape(req: NextRequest): Promise<NextResponse> {
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, waitFor: 'networkidle2' }),
+      body: JSON.stringify({ url, gotoOptions: { waitUntil: 'networkidle2' } }),
     }
   )
 
