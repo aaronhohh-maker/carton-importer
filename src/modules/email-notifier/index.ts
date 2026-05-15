@@ -2,11 +2,9 @@ import { Resend } from 'resend'
 import { createServiceClient } from '@/lib/supabase/server'
 import type { BulkJob, BulkJobImport } from '@/types'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'noreply@example.com'
-const TO_EMAIL = process.env.NOTIFICATION_EMAIL ?? ''
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? ''
+function getResend() {
+  return new Resend(process.env.RESEND_API_KEY)
+}
 
 // ---------------------------------------------------------------------------
 // sendBulkJobSummary
@@ -29,7 +27,7 @@ export async function sendBulkJobSummary(bulkJobId: string): Promise<void> {
   const imports: BulkJobImport[] = bulkJob.imports ?? []
   const failedImports = imports.filter((i) => i.status === 'failed')
 
-  const dashboardUrl = `${APP_URL}/products`
+  const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/products`
   const finishedAt = bulkJob.finished_at
     ? new Date(bulkJob.finished_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })
     : 'N/A'
@@ -141,9 +139,9 @@ export async function sendBulkJobSummary(bulkJobId: string): Promise<void> {
 
   const subject = `+Carton: Bulk import complete — ${bulkJob.completed}/${bulkJob.total_urls} products imported`
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
-    to: TO_EMAIL,
+  await getResend().emails.send({
+    from: process.env.RESEND_FROM_EMAIL ?? 'noreply@example.com',
+    to: process.env.NOTIFICATION_EMAIL ?? '',
     subject,
     html,
   })
@@ -166,7 +164,7 @@ export async function sendImportFailureAlert(importId: string, error: string): P
   }
 
   const productUrl: string = importRecord.url ?? 'unknown'
-  const dashboardUrl = `${APP_URL}/products`
+  const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ''}/products`
   const createdAt = importRecord.created_at
     ? new Date(importRecord.created_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })
     : 'N/A'
@@ -250,9 +248,9 @@ export async function sendImportFailureAlert(importId: string, error: string): P
 
   const subject = `+Carton: Import failed — ${shortUrl}`
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
-    to: TO_EMAIL,
+  await getResend().emails.send({
+    from: process.env.RESEND_FROM_EMAIL ?? 'noreply@example.com',
+    to: process.env.NOTIFICATION_EMAIL ?? '',
     subject,
     html,
   })
