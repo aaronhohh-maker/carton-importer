@@ -1,0 +1,55 @@
+export interface PricingTier {
+  min_qty: number
+  price: number
+}
+
+export interface ScrapedProduct {
+  title: string
+  description: string
+  variants: ScrapedVariant[]
+  imageUrls: string[]
+}
+
+export interface ScrapedVariant {
+  sizeLabel: string
+}
+
+export interface VariantPricing {
+  sizeLabel: string
+  pricingTiers: PricingTier[]
+  matched: boolean
+}
+
+export interface ProcessedProduct {
+  title: string
+  description: string
+  seoTitle: string
+  seoDescription: string
+  variants: ProcessedVariant[]
+  images: ProcessedImage[]
+}
+
+export interface ProcessedVariant {
+  sizeLabel: string
+  pricingTiers: PricingTier[]
+  shopifyImageId?: string
+}
+
+export interface ProcessedImage {
+  originalUrl: string
+  shopifyUrl?: string
+  altText: string
+}
+
+export type ImportStatus =
+  | 'pending'
+  | 'scraping'
+  | 'processing'
+  | 'draft'
+  | 'published'
+  | 'failed'
+  | 'deleted'
+
+export type ActivityAction = 'imported' | 'resynced' | 'published' | 'deleted'
+
+export type ResyncField = 'title' | 'description' | 'images' | 'variants' | 'seo'
