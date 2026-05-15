@@ -4,7 +4,7 @@ create table categories (
   name text not null,
   shopify_collection_id text,
   shopify_tag text,
-  noissue_url_path text not null,
+  noissue_url_path text,
   created_at timestamptz default now()
 );
 
