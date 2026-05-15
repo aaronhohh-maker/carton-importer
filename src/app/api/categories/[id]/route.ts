@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
 
 type Params = { params: Promise<{ id: string }> }
 
 export async function PUT(request: Request, { params }: Params) {
-  const supabase = await createClient()
+  const supabase = createServiceClient()
   const { id } = await params
   const body = await request.json()
 
@@ -34,7 +34,7 @@ export async function PUT(request: Request, { params }: Params) {
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
-  const supabase = await createClient()
+  const supabase = createServiceClient()
   const { id } = await params
 
   const { error } = await supabase.from('categories').delete().eq('id', id)

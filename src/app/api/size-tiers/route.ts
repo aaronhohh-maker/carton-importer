@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
 import { validatePricingTiers } from '@/modules/template-manager'
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
+  const supabase = createServiceClient()
   const body = await request.json()
 
   const { category_id, size_label, pricing_tiers } = body

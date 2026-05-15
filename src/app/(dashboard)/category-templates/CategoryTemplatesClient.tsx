@@ -44,11 +44,13 @@ function SizeTierRow({ tier, onSave, onDelete }: SizeTierRowProps) {
   const [pricingRaw, setPricingRaw] = useState(tiersToString(tier.pricing_tiers))
   const [pricingError, setPricingError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
 
   function handleEdit() {
     setSizeLabel(tier.size_label)
     setPricingRaw(tiersToString(tier.pricing_tiers))
     setPricingError(null)
+    setApiError(null)
     setEditing(true)
   }
 
@@ -59,9 +61,12 @@ function SizeTierRow({ tier, onSave, onDelete }: SizeTierRowProps) {
       return
     }
     setSaving(true)
+    setApiError(null)
     try {
       await onSave(tier.id, sizeLabel, tiers!)
       setEditing(false)
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
       setSaving(false)
     }
@@ -132,6 +137,7 @@ function SizeTierRow({ tier, onSave, onDelete }: SizeTierRowProps) {
         >
           Cancel
         </button>
+        {apiError && <p className="text-xs text-red-500 mt-1">{apiError}</p>}
       </td>
     </tr>
   )
@@ -150,6 +156,7 @@ function AddSizeTierRow({ categoryId, onAdd }: AddSizeTierRowProps) {
   const [pricingRaw, setPricingRaw] = useState('[\n  {"min_qty": 1, "price": 0}\n]')
   const [pricingError, setPricingError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
 
   async function handleAdd() {
     const { tiers, error } = parsePricingTiersInput(pricingRaw)
@@ -158,11 +165,14 @@ function AddSizeTierRow({ categoryId, onAdd }: AddSizeTierRowProps) {
       return
     }
     setSaving(true)
+    setApiError(null)
     try {
       await onAdd(categoryId, sizeLabel, tiers!)
       setSizeLabel('')
       setPricingRaw('[\n  {"min_qty": 1, "price": 0}\n]')
       setOpen(false)
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to add size tier')
     } finally {
       setSaving(false)
     }
@@ -224,6 +234,7 @@ function AddSizeTierRow({ categoryId, onAdd }: AddSizeTierRowProps) {
         >
           Cancel
         </button>
+        {apiError && <p className="text-xs text-red-500 mt-1">{apiError}</p>}
       </td>
     </tr>
   )
@@ -255,18 +266,21 @@ function CategoryCard({
   const [tag, setTag] = useState(category.shopify_tag ?? '')
   const [urlPath, setUrlPath] = useState(category.noissue_url_path ?? '')
   const [saving, setSaving] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
 
   function handleEditOpen() {
     setName(category.name)
     setCollectionId(category.shopify_collection_id ?? '')
     setTag(category.shopify_tag ?? '')
     setUrlPath(category.noissue_url_path ?? '')
+    setApiError(null)
     setEditing(true)
   }
 
   async function handleSave() {
     if (!name.trim()) return
     setSaving(true)
+    setApiError(null)
     try {
       await onUpdateCategory(category.id, {
         name: name.trim(),
@@ -275,8 +289,19 @@ function CategoryCard({
         noissue_url_path: urlPath || null,
       })
       setEditing(false)
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to save category')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm('Delete this category and all its size tiers?')) return
+    try {
+      await onDeleteCategory(category.id)
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to delete category')
     }
   }
 
@@ -306,13 +331,19 @@ function CategoryCard({
             Edit
           </button>
           <button
-            onClick={() => onDeleteCategory(category.id)}
+            onClick={handleDelete}
             className="text-xs text-red-400 hover:text-red-600 transition-colors"
           >
             Delete
           </button>
         </div>
       </div>
+
+      {apiError && !editing && (
+        <div className="px-4 pb-2">
+          <p className="text-xs text-red-500">{apiError}</p>
+        </div>
+      )}
 
       {/* Inline category edit form */}
       {editing && (
@@ -352,20 +383,23 @@ function CategoryCard({
               placeholder="/shop/food-papers/"
             />
           </div>
-          <div className="col-span-2 flex gap-2">
-            <button
-              onClick={handleSave}
-              disabled={saving || !name.trim()}
-              className="text-xs bg-zinc-800 text-white rounded px-3 py-1 hover:bg-zinc-700 disabled:opacity-40 transition-colors"
-            >
-              {saving ? 'Saving…' : 'Save changes'}
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              className="text-xs text-zinc-500 hover:text-zinc-800 transition-colors"
-            >
-              Cancel
-            </button>
+          <div className="col-span-2 flex flex-col gap-2">
+            <div className="flex gap-2">
+              <button
+                onClick={handleSave}
+                disabled={saving || !name.trim()}
+                className="text-xs bg-zinc-800 text-white rounded px-3 py-1 hover:bg-zinc-700 disabled:opacity-40 transition-colors"
+              >
+                {saving ? 'Saving…' : 'Save changes'}
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="text-xs text-zinc-500 hover:text-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+            {apiError && <p className="text-xs text-red-500">{apiError}</p>}
           </div>
         </div>
       )}
@@ -415,15 +449,19 @@ function AddCategoryForm({ onAdd }: AddCategoryFormProps) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) return
     setSaving(true)
+    setError(null)
     try {
       await onAdd(name.trim())
       setName('')
       setOpen(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create category')
     } finally {
       setSaving(false)
     }
@@ -441,32 +479,37 @@ function AddCategoryForm({ onAdd }: AddCategoryFormProps) {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="bg-white border border-zinc-200 rounded-lg px-4 py-3 flex items-center gap-3"
-    >
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        autoFocus
-        placeholder="Category name"
-        className="flex-1 text-sm border border-zinc-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-zinc-400"
-      />
-      <button
-        type="submit"
-        disabled={saving || !name.trim()}
-        className="text-sm bg-zinc-800 text-white rounded px-3 py-1 hover:bg-zinc-700 disabled:opacity-40 transition-colors"
+    <div className="flex flex-col gap-1">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white border border-zinc-200 rounded-lg px-4 py-3 flex items-center gap-3"
       >
-        {saving ? 'Creating…' : 'Create'}
-      </button>
-      <button
-        type="button"
-        onClick={() => setOpen(false)}
-        className="text-sm text-zinc-500 hover:text-zinc-800 transition-colors"
-      >
-        Cancel
-      </button>
-    </form>
+        <input
+          value={name}
+          onChange={(e) => { setName(e.target.value); setError(null) }}
+          autoFocus
+          placeholder="Category name"
+          className={`flex-1 text-sm border rounded px-2 py-1 focus:outline-none focus:ring-1 ${
+            error ? 'border-red-400 focus:ring-red-400' : 'border-zinc-300 focus:ring-zinc-400'
+          }`}
+        />
+        <button
+          type="submit"
+          disabled={saving || !name.trim()}
+          className="text-sm bg-zinc-800 text-white rounded px-3 py-1 hover:bg-zinc-700 disabled:opacity-40 transition-colors"
+        >
+          {saving ? 'Creating…' : 'Create'}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setOpen(false); setError(null) }}
+          className="text-sm text-zinc-500 hover:text-zinc-800 transition-colors"
+        >
+          Cancel
+        </button>
+      </form>
+      {error && <p className="text-xs text-red-500 px-1">{error}</p>}
+    </div>
   )
 }
 
@@ -510,7 +553,6 @@ export default function CategoryTemplatesClient({ initialCategories }: Props) {
   }, [])
 
   const handleDeleteCategory = useCallback(async (id: string) => {
-    if (!confirm('Delete this category and all its size tiers?')) return
     const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' })
     if (!res.ok) throw new Error(await res.text())
     setCategories((prev) => prev.filter((c) => c.id !== id))
