@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { chromium } from 'playwright'
+import { chromium } from 'playwright-core'
 import type { ScrapedProduct } from '@/types'
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
+  try {
+    return await handleScrape(req)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: `Scrape failed: ${message}` }, { status: 500 })
+  }
+}
+
+async function handleScrape(req: NextRequest): Promise<NextResponse> {
   let body: { url?: string }
   try {
     body = await req.json()
