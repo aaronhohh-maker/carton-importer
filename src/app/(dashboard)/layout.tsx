@@ -36,6 +36,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             Bulk Jobs
           </a>
+          <a
+            href="/settings"
+            className="text-sm text-zinc-600 hover:text-zinc-900 transition-colors"
+          >
+            Settings
+          </a>
           <div className="ml-auto">
             <LogoutButton />
           </div>
