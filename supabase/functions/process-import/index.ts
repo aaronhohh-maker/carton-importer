@@ -37,6 +37,19 @@ interface ScrapedProduct {
   imageUrls: string[]
 }
 
+interface ProcessedContent {
+  description: string
+  seoTitle: string
+  seoDescription: string
+  imageAltTexts: string[]
+}
+
+interface TransferResult {
+  originalUrl: string
+  shopifyUrl: string | null
+  altText: string
+}
+
 // Inline detectCategory (mirrors src/modules/template-manager/index.ts)
 function detectCategory(url: string, categories: Category[]): Category | null {
   for (const category of categories) {
@@ -86,11 +99,14 @@ async function shopifyFetch(path: string, body: unknown): Promise<Response> {
 async function createDraftProduct(params: {
   title: string
   description: string
+  seoTitle: string
+  seoDescription: string
   shopifyCollectionId: string | null
   shopifyTag: string | null
   variants: VariantPricing[]
+  shopifyImageUrls: string[]
 }): Promise<string> {
-  const { title, description, shopifyCollectionId, shopifyTag, variants } = params
+  const { title, description, seoTitle, seoDescription, shopifyCollectionId, shopifyTag, variants, shopifyImageUrls } = params
 
   const shopifyVariants = variants.map((v) => ({
     title: v.sizeLabel,
@@ -104,6 +120,21 @@ async function createDraftProduct(params: {
       status: 'draft',
       tags: shopifyTag ?? undefined,
       variants: shopifyVariants.length > 0 ? shopifyVariants : [{ title: 'Default', price: '0.00' }],
+      images: shopifyImageUrls.map((src) => ({ src })),
+      metafields: [
+        {
+          namespace: 'global',
+          key: 'title_tag',
+          value: seoTitle,
+          type: 'single_line_text_field',
+        },
+        {
+          namespace: 'global',
+          key: 'description_tag',
+          value: seoDescription,
+          type: 'single_line_text_field',
+        },
+      ],
     },
   })
 
@@ -212,28 +243,91 @@ Deno.serve(async (req: Request) => {
       category = detectCategory(importRecord.url, categories)
     }
 
-    // 6. Map pricing
+    // 6. AI content processing — rewrite description, generate SEO fields and alt texts
+    let aiProcessed: ProcessedContent | null = null
+    try {
+      const aiRes = await fetch(`${appUrl}/api/ai-process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          raw: {
+            title: scraped.title,
+            description: scraped.description,
+            imageUrls: scraped.imageUrls,
+            categoryName: category?.name ?? '',
+          },
+        }),
+      })
+
+      if (aiRes.ok) {
+        aiProcessed = await aiRes.json() as ProcessedContent
+      } else {
+        const errData = await aiRes.text()
+        console.warn(`[process-import] AI processing failed (continuing with raw content): ${aiRes.status} ${errData}`)
+      }
+    } catch (aiErr) {
+      console.warn(`[process-import] AI processing error (continuing with raw content): ${String(aiErr)}`)
+    }
+
+    // Use AI-enriched content when available, fall back to scraped raw content
+    const finalDescription = aiProcessed?.description ?? scraped.description
+    const seoTitle = aiProcessed?.seoTitle ?? scraped.title.slice(0, 60)
+    const seoDescription = aiProcessed?.seoDescription ?? scraped.description.slice(0, 160)
+
+    // 7. Map pricing
     const sizeTiers: SizeTier[] = category?.size_tiers ?? []
     const sizeLabels = scraped.variants.map((v) => v.sizeLabel)
     const variantPricing = mapPricing(sizeLabels, sizeTiers)
 
-    // 7. Create Shopify draft product
+    // 8. Transfer images to Shopify Files API
+    let transferResults: TransferResult[] = []
+    if (scraped.imageUrls.length > 0 && appUrl) {
+      try {
+        const altTexts = scraped.imageUrls.map(() => scraped.title)
+        const transferRes = await fetch(`${appUrl}/api/transfer-images`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrls: scraped.imageUrls, altTexts }),
+        })
+        if (transferRes.ok) {
+          transferResults = await transferRes.json()
+        } else {
+          const errData = await transferRes.text()
+          console.error(`[process-import] Image transfer failed: ${transferRes.status} ${errData}`)
+        }
+      } catch (err) {
+        console.error(`[process-import] Image transfer error: ${String(err)}`)
+      }
+    }
+    const shopifyImageUrls = transferResults
+      .filter((r) => r.shopifyUrl !== null)
+      .map((r) => r.shopifyUrl as string)
+
+    // 9. Create Shopify draft product using AI-enriched content
     const shopifyProductId = await createDraftProduct({
       title: scraped.title,
-      description: scraped.description,
+      description: finalDescription,
+      seoTitle,
+      seoDescription,
       shopifyCollectionId: category?.shopify_collection_id ?? null,
       shopifyTag: category?.shopify_tag ?? null,
       variants: variantPricing,
+      shopifyImageUrls,
     })
 
     const processedData = {
       title: scraped.title,
-      description: scraped.description,
+      description: finalDescription,
+      seoTitle,
+      seoDescription,
       variants: variantPricing,
       imageUrls: scraped.imageUrls,
+      imageAltTexts: aiProcessed?.imageAltTexts ?? scraped.imageUrls.map(() => scraped.title),
+      transferredImages: transferResults,
+      aiEnriched: aiProcessed !== null,
     }
 
-    // 8. Update import: status → 'draft'
+    // 10. Update import: status → 'draft'
     await supabase
       .from('imports')
       .update({
@@ -245,11 +339,18 @@ Deno.serve(async (req: Request) => {
       })
       .eq('id', importId)
 
-    // 9. Write activity_log entry
+    // 11. Write activity_log entry with field-level diff (initial import: old = null)
+    const changedFields: Record<string, { old: unknown; new: unknown }> = {
+      title: { old: null, new: processedData.title },
+      description: { old: null, new: processedData.description },
+      variants_count: { old: null, new: processedData.variants.length },
+      image_count: { old: null, new: processedData.imageUrls.length },
+    }
+
     await supabase.from('activity_log').insert({
       import_id: importId,
       action: 'imported',
-      changed_fields: null,
+      changed_fields: changedFields,
       triggered_by: importRecord.created_by ?? null,
     })
 

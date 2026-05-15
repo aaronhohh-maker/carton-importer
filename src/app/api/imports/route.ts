@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import { logActivity } from '@/modules/activity-logger'
 
 export async function POST(req: NextRequest) {
   let body: { url?: string; categoryId?: string }
@@ -34,6 +35,12 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     )
   }
+
+  // Log the 'imported' action immediately when import record is created
+  await logActivity({
+    importId: importRecord.id,
+    action: 'imported',
+  })
 
   // 2. Trigger edge function asynchronously (fire-and-forget)
   const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/process-import`
