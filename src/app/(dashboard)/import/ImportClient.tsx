@@ -223,9 +223,17 @@ function SingleImportTab({ categories }: { categories: Category[] }) {
           </div>
         )}
 
+        {!selectedCategoryId && url.trim() && (
+          <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            Please select a category to continue. Go to{' '}
+            <a href="/category-templates" className="underline font-medium">Category Templates</a>{' '}
+            to set one up if none appear.
+          </p>
+        )}
+
         <button
           type="submit"
-          disabled={isSubmitting || !url.trim()}
+          disabled={isSubmitting || !url.trim() || !selectedCategoryId}
           className="bg-zinc-900 text-white text-sm px-5 py-2 rounded-md hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isSubmitting ? 'Starting import…' : 'Import Product'}

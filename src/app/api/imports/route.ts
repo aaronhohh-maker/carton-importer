@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { logActivity } from '@/modules/activity-logger'
 
 export async function POST(req: NextRequest) {
+  try {
   let body: { url?: string; categoryId?: string }
   try {
     body = await req.json()
@@ -14,6 +15,14 @@ export async function POST(req: NextRequest) {
 
   if (!url || typeof url !== 'string' || !url.trim()) {
     return NextResponse.json({ error: 'url is required' }, { status: 400 })
+  }
+
+  if (!categoryId) {
+    return NextResponse.json({ error: 'Please select a category before importing' }, { status: 400 })
+  }
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ error: 'Database not configured. Check Vercel environment variables.' }, { status: 500 })
   }
 
   const supabase = createServiceClient()
@@ -56,4 +65,8 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json({ importId: importRecord.id }, { status: 201 })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Internal server error'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
 }
