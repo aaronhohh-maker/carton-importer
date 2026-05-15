@@ -5,6 +5,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="max-w-5xl mx-auto flex items-center gap-6">
           <span className="font-semibold text-zinc-900 text-lg">+Carton</span>
           <a
+            href="/import"
+            className="text-sm text-zinc-600 hover:text-zinc-900 transition-colors"
+          >
+            Import
+          </a>
+          <a
+            href="/products"
+            className="text-sm text-zinc-600 hover:text-zinc-900 transition-colors"
+          >
+            Products
+          </a>
+          <a
             href="/category-templates"
             className="text-sm text-zinc-600 hover:text-zinc-900 transition-colors"
           >
