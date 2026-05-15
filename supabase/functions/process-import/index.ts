@@ -370,6 +370,17 @@ Deno.serve(async (req: Request) => {
       })
       .eq('id', importId)
 
+    // Fire failure alert (fire-and-forget — don't let notification errors mask the real error)
+    if (appUrl) {
+      fetch(`${appUrl}/api/notify-import-failure`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ importId, error: message }),
+      }).catch((notifyErr) => {
+        console.error(`[process-import] Failed to send failure notification: ${String(notifyErr)}`)
+      })
+    }
+
     return new Response(
       JSON.stringify({ error: message }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }

@@ -70,4 +70,34 @@ export type ImportStatus =
 
 export type ActivityAction = 'imported' | 'resynced' | 'published' | 'deleted'
 
+export type BulkJobStatus = 'pending' | 'running' | 'complete' | 'failed'
+
+export interface BulkJobImport {
+  id: string
+  url: string
+  status: ImportStatus
+  shopify_product_id: string | null
+  title: string | null
+}
+
+export interface BulkJob {
+  id: string
+  status: BulkJobStatus
+  total_urls: number
+  completed: number
+  failed: number
+  csv_filename: string | null
+  email_sent: boolean
+  created_at: string
+  finished_at: string | null
+  imports?: BulkJobImport[]
+}
+
+export interface CsvPreviewRow {
+  url: string
+  category: string
+  valid: boolean
+  reason?: string
+}
+
 export type ResyncField = 'title' | 'description' | 'images' | 'variants' | 'seo'

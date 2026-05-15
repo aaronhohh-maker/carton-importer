@@ -28,6 +28,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             Activity Log
           </a>
+          <a
+            href="/bulk-jobs"
+            className="text-sm text-zinc-600 hover:text-zinc-900 transition-colors"
+          >
+            Bulk Jobs
+          </a>
         </div>
       </nav>
       <main className="max-w-5xl mx-auto px-6 py-8">{children}</main>
