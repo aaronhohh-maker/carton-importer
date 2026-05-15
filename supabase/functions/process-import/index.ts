@@ -222,8 +222,15 @@ Deno.serve(async (req: Request) => {
     })
 
     if (!scrapeRes.ok) {
-      const errData = await scrapeRes.json()
-      throw new Error(`Scrape failed: ${errData.error ?? scrapeRes.status}`)
+      const errText = await scrapeRes.text()
+      let errMsg: string
+      try {
+        const errData = JSON.parse(errText)
+        errMsg = errData.error ?? String(scrapeRes.status)
+      } catch {
+        errMsg = `HTTP ${scrapeRes.status}`
+      }
+      throw new Error(`Scrape failed: ${errMsg}`)
     }
 
     const scraped: ScrapedProduct = await scrapeRes.json()

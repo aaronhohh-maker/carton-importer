@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
-const suisseIntl = localFont({
+const neueMontreal = localFont({
   src: [
-    { path: "../fonts/SuisseIntl-Thin.otf",    weight: "100", style: "normal" },
-    { path: "../fonts/SuisseIntl-Regular.otf",  weight: "400", style: "normal" },
-    { path: "../fonts/SuisseIntl-Medium.otf",   weight: "500", style: "normal" },
+    { path: "../fonts/NeueMontreal-Light.woff",   weight: "300", style: "normal" },
+    { path: "../fonts/NeueMontreal-Regular.woff",  weight: "400", style: "normal" },
+    { path: "../fonts/NeueMontreal-Medium.woff",   weight: "500", style: "normal" },
   ],
-  variable: "--font-suisse",
+  variable: "--font-neue-montreal",
   display: "swap",
 });
 
@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${suisseIntl.variable} h-full antialiased`}>
+    <html lang="en" className={`${neueMontreal.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans">{children}</body>
     </html>
   );
