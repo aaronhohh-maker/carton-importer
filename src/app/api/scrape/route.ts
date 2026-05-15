@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { chromium } from 'playwright-core'
 import type { ScrapedProduct } from '@/types'
 
 export const maxDuration = 60
@@ -37,6 +36,8 @@ async function handleScrape(req: NextRequest): Promise<NextResponse> {
       { status: 500 }
     )
   }
+
+  const { chromium } = await import('playwright-core')
 
   let browser
   try {
