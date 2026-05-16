@@ -108,10 +108,13 @@ async function createDraftProduct(params: {
 }): Promise<string> {
   const { title, description, seoTitle, seoDescription, shopifyCollectionId, shopifyTag, variants, shopifyImageUrls } = params
 
-  const shopifyVariants = variants.map((v) => ({
-    title: v.sizeLabel,
-    price: v.pricingTiers.length > 0 ? v.pricingTiers[0].price.toFixed(2) : '0.00',
-  }))
+  const hasVariants = variants.length > 0
+  const shopifyVariants = hasVariants
+    ? variants.map((v) => ({
+        option1: v.sizeLabel,
+        price: v.pricingTiers.length > 0 ? v.pricingTiers[0].price.toFixed(2) : '0.00',
+      }))
+    : [{ option1: 'Default', price: '0.00' }]
 
   const productRes = await shopifyFetch('/products.json', {
     product: {
@@ -119,7 +122,8 @@ async function createDraftProduct(params: {
       body_html: description,
       status: 'draft',
       tags: shopifyTag ?? undefined,
-      variants: shopifyVariants.length > 0 ? shopifyVariants : [{ title: 'Default', price: '0.00' }],
+      options: [{ name: hasVariants ? 'Type' : 'Title' }],
+      variants: shopifyVariants,
       images: shopifyImageUrls.map((src) => ({ src })),
       metafields: [
         {
