@@ -24,30 +24,20 @@ async function handleScrape(req: NextRequest): Promise<NextResponse> {
   const { url } = body
 
   if (!url || !url.includes('noissue.co')) {
-    return NextResponse.json(
-      { error: 'URL must be a noissue.co product URL' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'URL must be a noissue.co product URL' }, { status: 400 })
   }
 
   const apiKey = process.env.BROWSERLESS_API_KEY
   if (!apiKey) {
-    return NextResponse.json(
-      { error: 'BROWSERLESS_API_KEY environment variable is not set' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'BROWSERLESS_API_KEY environment variable is not set' }, { status: 500 })
   }
 
-  // Use Browserless REST API — no native browser binaries needed
   const contentRes = await fetch(
     `https://chrome.browserless.io/content?token=${apiKey}&stealth`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url,
-        gotoOptions: { waitUntil: 'networkidle2', timeout: 45000 },
-      }),
+      body: JSON.stringify({ url, gotoOptions: { waitUntil: 'networkidle2', timeout: 45000 } }),
     }
   )
 
@@ -59,12 +49,24 @@ async function handleScrape(req: NextRequest): Promise<NextResponse> {
   const html = await contentRes.text()
   const root = parse(html)
 
-  // --- Title ---
-  const title = root.querySelector('h1')?.text.trim() ?? ''
+  // --- JSON-LD structured data (most reliable on noissue.co) ---
+  let jsonLd: Record<string, unknown> | null = null
+  for (const script of root.querySelectorAll('script[type="application/ld+json"]')) {
+    try {
+      const parsed = JSON.parse(script.text)
+      if (parsed?.name) { jsonLd = parsed; break }
+    } catch { /* skip malformed */ }
+  }
 
-  // Guard: detect error pages before creating any Shopify product
+  // --- Title ---
+  const title = (jsonLd?.name as string | undefined)?.trim()
+    ?? root.querySelector('h1')?.text.trim()
+    ?? ''
+
+  // Guard: detect error/bot-challenge pages
   const lowerTitle = title.toLowerCase()
   if (
+    !title ||
     lowerTitle.includes('403') ||
     lowerTitle.includes('401') ||
     lowerTitle.includes('404') ||
@@ -77,130 +79,53 @@ async function handleScrape(req: NextRequest): Promise<NextResponse> {
   }
 
   // --- Description ---
-  let description = ''
-  const descSelectors = [
-    '[data-testid="product-description"]',
-    '.product-description',
-    '.product__description',
-  ]
-  for (const sel of descSelectors) {
-    const el = root.querySelector(sel)
-    if (el) {
-      description = el.text.trim()
-      break
-    }
-  }
-  // Fallback: any element whose class contains "description"
+  // JSON-LD description first; fall back to the intro paragraph (class "text-core-grey-darkest")
+  let description = (jsonLd?.description as string | undefined)?.trim() ?? ''
   if (!description) {
-    const el = root.querySelectorAll('[class]').find((n) =>
-      n.getAttribute('class')?.toLowerCase().includes('description')
-    )
-    if (el) description = el.text.trim()
+    const descEl = root.querySelector('p[class*="text-core-grey-darkest"]')
+      ?? root.querySelector('p[class*="font-mori"]')
+    if (descEl) description = descEl.text.trim()
   }
 
-  // --- Variants (sizes) ---
-  let sizeLabels: string[] = []
-
-  // Try buttons with data-value first (common pattern)
-  const dataValueButtons = root.querySelectorAll('button[data-value]')
-  if (dataValueButtons.length > 0) {
-    sizeLabels = dataValueButtons
-      .map((b) => b.text.trim())
-      .filter((t) => t.length > 0)
+  // --- Images ---
+  // JSON-LD image array is the cleanest source on noissue.co
+  let imageUrls: string[] = []
+  const jsonLdImage = jsonLd?.image
+  if (jsonLdImage) {
+    const raw = Array.isArray(jsonLdImage) ? jsonLdImage : [jsonLdImage]
+    imageUrls = raw.filter((s): s is string => typeof s === 'string' && s.startsWith('http'))
   }
 
-  // Try size-related button groups
-  if (sizeLabels.length === 0) {
-    const sizeContainerSelectors = [
-      '[data-testid*="size"]',
-      '[data-option-name*="Size"]',
-      '[data-option-name*="size"]',
-      '[class*="SizeSelector"]',
-      '[class*="size-selector"]',
-    ]
-    for (const sel of sizeContainerSelectors) {
-      const container = root.querySelector(sel)
-      if (container) {
-        const labels = container
-          .querySelectorAll('button')
-          .map((b) => b.text.trim())
-          .filter((t) => t.length > 0)
-        if (labels.length > 0) {
-          sizeLabels = labels
-          break
-        }
-      }
+  // DOM fallback: look for storyblok CDN images (noissue uses storyblok for assets)
+  if (imageUrls.length === 0) {
+    const seen = new Set<string>()
+    for (const img of root.querySelectorAll('img')) {
+      const src = img.getAttribute('src') ?? ''
+      if (!src.includes('storyblok') && !src.startsWith('http')) continue
+      if (src.includes('logo') || src.includes('icon')) continue
+      const clean = src.split('?')[0]
+      if (!seen.has(clean)) { seen.add(clean); imageUrls.push(clean) }
     }
   }
 
-  // Fallback: <select> options
+  // --- Variants ---
+  // noissue uses HeadlessUI radiogroup for "Type" options (White / Premium White / Kraft etc.)
+  // aria-label pattern: "Type White", "Type Kraft", "Type Premium White"
+  const radioEls = root.querySelectorAll('[role="radio"]')
+  let sizeLabels: string[] = radioEls
+    .map((el) => (el.getAttribute('aria-label') ?? '').replace(/^Type\s+/i, '').trim())
+    .filter((l) => l.length > 0)
+
+  // Fall back to listbox button aria-label for the currently selected size dimension
   if (sizeLabels.length === 0) {
-    const selectSelectors = [
-      'select[data-option-name*="size"]',
-      'select[name*="size"]',
-      'select',
-    ]
-    for (const sel of selectSelectors) {
-      const select = root.querySelector(sel)
-      if (select) {
-        const labels = select
-          .querySelectorAll('option')
-          .map((o) => o.text.trim())
-          .filter((t) => t.length > 0 && !t.toLowerCase().includes('select'))
-        if (labels.length > 0) {
-          sizeLabels = labels
-          break
-        }
-      }
-    }
+    const listboxBtn = root.querySelector('[role="listbox"] button')
+    const btnLabel = listboxBtn?.getAttribute('aria-label') ?? ''
+    // aria-label format: "size (lxwxh) 4 x 4 x 2 "" — extract everything after the closing paren
+    const match = btnLabel.match(/\)\s*(.+)$/)
+    if (match) sizeLabels = [match[1].trim()]
   }
 
   const variants = sizeLabels.map((sizeLabel) => ({ sizeLabel }))
-
-  // --- Images ---
-  const seen = new Set<string>()
-  const imageUrls: string[] = []
-
-  const imgContainerSelectors = [
-    '[data-testid*="product-image"]',
-    '[class*="ProductImage"]',
-    '[class*="product-image"]',
-    '[class*="ProductGallery"]',
-    '[class*="product-gallery"]',
-    '[class*="Gallery"]',
-    '[class*="gallery"]',
-    'figure',
-  ]
-
-  for (const sel of imgContainerSelectors) {
-    const container = root.querySelector(sel)
-    if (container) {
-      for (const img of container.querySelectorAll('img')) {
-        const src = img.getAttribute('src') ?? ''
-        if (!src.startsWith('http')) continue
-        const clean = src.split('?')[0]
-        if (!seen.has(clean)) {
-          seen.add(clean)
-          imageUrls.push(clean)
-        }
-      }
-      if (imageUrls.length > 0) break
-    }
-  }
-
-  // Last-resort: all images, skip logos/icons
-  if (imageUrls.length === 0) {
-    for (const img of root.querySelectorAll('img')) {
-      const src = img.getAttribute('src') ?? ''
-      if (!src.startsWith('http')) continue
-      if (src.includes('logo') || src.includes('icon')) continue
-      const clean = src.split('?')[0]
-      if (!seen.has(clean)) {
-        seen.add(clean)
-        imageUrls.push(clean)
-      }
-    }
-  }
 
   const product: ScrapedProduct = { title, description, variants, imageUrls }
   return NextResponse.json(product)
