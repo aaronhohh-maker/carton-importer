@@ -40,11 +40,17 @@ async function handleScrape(req: NextRequest): Promise<NextResponse> {
 
   // Use Browserless REST API — no native browser binaries needed
   const contentRes = await fetch(
-    `https://chrome.browserless.io/content?token=${apiKey}`,
+    `https://chrome.browserless.io/content?token=${apiKey}&stealth`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, gotoOptions: { waitUntil: 'networkidle2' } }),
+      body: JSON.stringify({
+        url,
+        gotoOptions: { waitUntil: 'networkidle2', timeout: 45000 },
+        userAgent:
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        viewport: { width: 1440, height: 900 },
+      }),
     }
   )
 
@@ -58,6 +64,20 @@ async function handleScrape(req: NextRequest): Promise<NextResponse> {
 
   // --- Title ---
   const title = root.querySelector('h1')?.text.trim() ?? ''
+
+  // Guard: detect error pages before creating any Shopify product
+  const lowerTitle = title.toLowerCase()
+  if (
+    lowerTitle.includes('403') ||
+    lowerTitle.includes('401') ||
+    lowerTitle.includes('404') ||
+    lowerTitle.includes('access denied') ||
+    lowerTitle.includes('forbidden') ||
+    lowerTitle.includes('just a moment') ||
+    (lowerTitle.includes('error') && title.length < 30)
+  ) {
+    throw new Error(`Page blocked or not found — noissue.co returned: "${title}"`)
+  }
 
   // --- Description ---
   let description = ''
